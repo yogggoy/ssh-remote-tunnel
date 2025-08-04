@@ -1,287 +1,274 @@
-# ХопБит. или "Туда и обратно"
+# HopBit — There and Back Again
 
-Инструкция для прокладки тоннеля между двумя ПК через внешний шлюз.  
-Можно почитать man страницу ssh про флаги  -R -p, этого будет достаточно.  
+This guide describes how to set up an SSH tunnel between two computers via an external gateway.
+A basic understanding of the `ssh` command (particularly the `-R` and `-p` options) is sufficient for following this guide.
 
-Утилита `corkscrew` используется для обхода внутреннего файрволла.  
-Так бывает, что админы и СБ перекрывают доступ в интернет, что подключиться по ssh к VPS по стандартному 22 порту ssh не получается.
+The `corkscrew` utility is used to bypass internal firewalls that block direct SSH access to a VPS over the standard port 22.
+This can be useful in corporate environments where the IT or security department restricts outbound connections.
 
-Для защиты от гремлинов, рекомендуется настроить вход на сервер только по ssh ключу. Здесь это не описано.
+> **Security note:** For better protection against unauthorized access, configure SSH key‑based authentication and disable password logins. This is not covered in detail here.
 
-## Действующие лица
+---
 
-карта мира:
+## Network Layout
 
 ```mermaid
 graph LR
-A["home PC"] <-- port 6666 --> B(VPS) <--> C(рабочий proxy) <-- port 6644 --> D[work PC]
+A["Home PC"] <-- port 6666 --> B(VPS) <--> C(Office proxy) <-- port 6644 --> D[Work PC]
 
-n1["гремлины
-o(Tヘoω･ﾍ(_|ωﾉヾ(･||д|_￣)▽┬┴┴┬_φ〆┴･┬┤( ͡° ͜ʖ┬┴┬╯"]
-
-n1@{ shape: hex} -- атака на VPS --> B
+n1["Gremlins
+o(Tヘoω･ヘ(_|ωノ・(ｼ||д|_￣)▽┌┴┴┌_φ∵∧σ(͡°  ⁠͜ ʖ͜ ⊙)"]
+n1@{ shape: hex} -- attack on VPS --> B
 style n1 fill:#FF9D80
 ```
 
-- home PC
-  - home_ip
-  - home_user
+**Hosts:**
 
-- VPS
-  - vps_ip
-  - vps_user
+* **Home PC**
 
-- work PC
-  - work_ip
-  - work_user
+  * `home_ip`
+  * `home_user`
+* **VPS**
 
-- рандомный port 1 **[6666]**
-- рандомный port 2 **[6644]**
+  * `vps_ip`
+  * `vps_user`
+* **Work PC**
 
-## Краткая сводка на 1 экран
+  * `work_ip`
+  * `work_user`
 
->### Тоннель от VPS к домашнему ПК
->
->1. открыть Remote на домашнем ПК. Процесс должен быть всегда открыт.  
->**home@**`ssh -R 6666:localhost:22  vps_user@vps_ip`
->
->2. подключиться к домашнему ПК с сервера  
->**vps@**`ssh -CX home_user@localhost -p 6666`
->
->### Подключиться с работы к VPS
->
->1. на рабочем ПК установить corkscrew  
->`https://github.com/bryanpkc/corkscrew`
->
->2. настроить конфиг файл ssh на рабочем ПК  
-> заменить INTERNAL_PROXY_IP INTERNAL_PROXY_PORT на используемые в офисе
->
->```config
->host name_vps
->        HostName **vps_ip**
->        Port 443
->        User **vps_user**
->        ProxyCommand /usr/local/bin/corkscrew INTERNAL_PROXY_IP INTERNAL_PROXY_PORT %h %p
->host name_home
->        HostName localhost
->        User **home_user**
->        Port 6666
->        ProxyJump name_vps
->```
->
->3. подключиться к серверу с работы  
->**work@**`ssh -CX name_vps`
->
->### Подключиться с работы к дому
->
->1. на домашнем ПК должен быть открыт port forwarding  
->**home@**`ssh -R 6666:localhost:22  vps_user@vps_ip`
->
->2. тогда с рабочего ПК можно выполнить  
->**work@**`ssh -CX name_home`
->
->### Подключиться из дома к рабочему ПК
->
->1. на рабочем ПК должен быть открыт port forward  
->**work@**`ssh -R 6644:localhost:22 name_vps`
->
->2. с домашнего ПК подключаемся к серверу, а после к рабочему ПК  
->**home@**`ssh -CX vps_user@vps_ip`  
->**vps@**`ssh -CX work_user@localhost -p 6644`
+**Ports:**
 
-## Подробная инструкция с пояснениями
+* Random port 1 — **6666**
+* Random port 2 — **6644**
 
-### Подключиться к серверу
+---
 
-```mermaid
-graph LR
-A["home PC"] --> B(VPS)
-```
+## Quick Reference
 
-Сначала подключаемся к серверу с домашнего ПК, для проверки и настройки сервера.  
-**home@**`ssh vps_user@vps_ip`
+### Tunnel from VPS to Home PC
 
-#### Offtop
-> Просто чтобы убедиться, что сеть, репозиторий и сама машина в рабочем состоянии,
-> на новой машине всегда начинаю с этой команды:  
-> **vps@**`apt update`  
-> **vps@**`apt install mc htop`
->
-> Обычно при покупке VPS, сразу выдают root пользователя и его пароль.
-> Cоздаем нового пользователя и добавляем его в **root sudo** группы
->
-> ```bash
-> useradd vps_user
-> usermod -aG sudo vps_user
-> usermod -aG root vps_user
-> ```
->
-> Запретить подключаться к серверу через root
-> В файле конфига ssh сервера **/etc/ssh/sshd_config**
-> добавить строчку:
->
-> `PermitRootLogin no`
->
-> После чего перезапустить службу ssh
-> #:$sudo service ssh restart
-
-### Тоннель от VPS к домашнему ПК
-
-```mermaid
-graph LR
-A["home PC"] <-- port 6666 --> B(VPS)
-```
-
-Нельзя просто так взять и подключиться с сервера к домашнему ПК с серым ip.  
-Поэтому нужно пробросить тоннель (пункт 1), и поддерживать его в рабочем состоянии.  
-Когда Remote/Reverse тоннель активен, можно проверить подключение (пункт 2).
-
-1. открыть Remote на домашнем ПК. Процесс должен быть всегда активный  
+1. On the Home PC, open a reverse SSH tunnel (keep it running):  
 **home@**`ssh -R 6666:localhost:22  vps_user@vps_ip`
 
-2. подключиться к домашнему ПК с сервера  
+2. From the VPS, connect to the Home PC:  
 **vps@**`ssh -CX home_user@localhost -p 6666`
 
-Для того, чтобы не держать терминал с открытым `ssh -R` - можно выполнить подключение
-в "фоновом" режиме. Добавив флаги `-f -N`  
-**home@**`ssh -f -N -R 6666:localhost:22  vps_user@vps_ip`
+### Connect from Work PC to VPS
 
-Но ssh соединение имеет свойство отваливаться. И следить за его активностью в таком
-виде не очень удобно  
-**home@**`ps -ef | grep ssh`
+1. Install **corkscrew** on the Work PC:
+    [https://github.com/bryanpkc/corkscrew](https://github.com/bryanpkc/corkscrew)
+2. Configure SSH on the Work PC, replacing `INTERNAL_PROXY_IP` and `INTERNAL_PROXY_PORT` with your office proxy details:
 
-Для этого можно запустить autossh.
-
-### Подключиться с работы к VPS
-
-```mermaid
-graph LR
-A(VPS) <--> B[corkscrew] <--> CB[work PC]
-```
-
-1. на рабочем ПК установить corkscrew  
-**https://github.com/bryanpkc/corkscrew**  
-Вроде можно и без него через ProxyCommand nc ProxyJump, но у меня не получилось.
-
-2. настроить конфиг файл ssh на рабочем ПК  
-заменить INTERNAL_PROXY_IP INTERNAL_PROXY_PORT на используемые в офисе
-
-```config
-host *
-        ForwardX11 yes
-        Compression yes
-
-host name_vps
+    ```sshconfig
+    host name_vps
         HostName vps_ip
         Port 443
         User vps_user
-        # IdentityFile ~/.ssh/id_rsa
         ProxyCommand /usr/local/bin/corkscrew INTERNAL_PROXY_IP INTERNAL_PROXY_PORT %h %p
 
-host name_home
+    host name_home
         HostName localhost
         User home_user
         Port 6666
         ProxyJump name_vps
-```
+    ```
 
-3. подключиться к серверу с работы  
+3. Connect to the VPS:  
 **work@**`ssh -CX name_vps`
 
-### Подключиться с работы к дому
+### Connect from Work PC to Home PC
+
+1. Ensure the Home PC has the reverse tunnel running:  
+**home@**`ssh -R 6666:localhost:22 vps_user@vps_ip`
+
+2. From the Work PC:  
+**work@**`ssh -CX name_home`
+
+### Connect from Home PC to Work PC
+
+1. On the Work PC, start a reverse SSH tunnel:  
+**work@**`ssh -R 6644:localhost:22 name_vps`
+
+2. From the Home PC:  
+**home@**`ssh -CX vps_user@vps_ip`  
+**vps@**`ssh -CX work_user@localhost -p 6644`
+
+---
+
+## Detailed Instructions
+
+### 1. Connect to VPS
+
+```mermaid
+graph LR
+A["Home PC"] --> B(VPS)
+```
+
+From the Home PC:  
+**home@**`ssh vps_user@vps_ip`
+
+> #### Initial setup on VPS (optional)
+>
+> Verify that networking, package management, and basic tools are working:
+>
+> **vps@**`apt update`  
+> **vps@**`apt install mc htop`
+>
+> If your VPS provider gives you only the `root` account:
+>
+> ```bash
+> sudo useradd vps_user
+> sudo usermod -aG sudo vps_user
+> sudo usermod -aG root vps_user
+> ```
+>
+> Disable direct root login in `/etc/ssh/sshd_config`:
+>
+> ```text
+> PermitRootLogin no
+> ```
+>
+> Restart the SSH service:
+>
+> ```bash
+> sudo service ssh restart
+> ```
+
+### 2. Reverse Tunnel from VPS to Home PC
+
+```mermaid
+graph LR
+A["Home PC"] <-- port 6666 --> B(VPS)
+```
+
+A VPS cannot initiate an SSH connection to a home machine with a private (NAT) IP address.
+Instead, the Home PC must establish a reverse tunnel **to the VPS**.
+
+1. Open Remonte tunnel on Home PC (should be running):  
+**home@**`ssh -R 6666:localhost:22 vps_user@vps_ip`
+
+2. Connect to Home PC from VPS:  
+**vps@**`ssh -CX home_user@localhost -p 6666`
+
+3. Keep the tunnel alive automatically:
+
+***autossh ins't standart util***
+
+**home@**`sudo apt install autossh`  
+**home@**`autossh -f -N -R 6666:localhost:22 vps_user@vps_ip`
+
+### 3. Connect from Work PC to VPS
+
+```mermaid
+graph LR
+A(VPS) <--> B[corkscrew] <--> C[Work PC]
+```
+
+If the office network restricts outbound SSH:
+
+1. Install corkscrew:  
+**https://github.com/bryanpkc/corkscrew**  
+
+2. Configure SSH on the Work PC:
+
+    ```sshconfig
+    host name_vps
+        HostName vps_ip
+        Port 443
+        User vps_user
+        ProxyCommand /usr/local/bin/corkscrew INTERNAL_PROXY_IP INTERNAL_PROXY_PORT %h %p
+    ```
+
+3. Connect:  
+**work@**`ssh -CX name_vps`
+
+### 4. Connect from Home PC to Work PC
 
 ```mermaid
 graph LR
 A["home PC"] <-- port 6666 --> B(VPS) <--> C(рабочий proxy) <-- port 6644 --> D[work PC]
 ```
 
-1. на домашнем ПК должен быть открыт port forwarding  
-**home@**`ssh -R 6666:localhost:22  vps_user@vps_ip`
+1. On the Work PC:  
+   **work@**`ssh -R 6644:localhost:22 name_vps`
 
-2. тогда с рабочего ПК можно выполнить  
-**work@**`ssh -CX name_home`
-
-### Подключиться из дома к рабочему ПК
-
-1. на рабочем ПК должен быть открыт port forward  
-**work@**`ssh -R 6644:localhost:22 name_vps`
-
-2. с домашнего ПК подключаемся к серверу, а после к рабочему ПК  
+2. On the Home PC:  
 **home@**`ssh -CX vps_user@vps_ip`  
 **vps@**`ssh -CX work_user@localhost -p 6644`
 
-## Пример настройки ssh config на всех узлах
+---
 
-### HOME CONF
+## SSH Config Examples
 
-```config
+### Home PC
+
+```sshconfig
 host *
-        ForwardX11 yes
-        Compression yes
-
-Host name_vps
-        HostName vps_ip
-        User vps_user
-
-host name_vps_R
-        HostName vps_ip
-        User vps_user
-        RemoteForward 6666 localhost:22
-```
-
-### WORK CONF
-
-```conf
-host *
-        ForwardX11 yes
-        Compression yes
+    ForwardX11 yes
+    Compression yes
 
 host name_vps
-        HostName vps_ip
-        Port 443
-        User vps_user
-        #IdentityFile ~/.ssh/id_rsa
-        ProxyCommand /usr/local/bin/corkscrew 192.168.172.129 3128 %h %p
+    HostName vps_ip
+    User vps_user
 
 host name_vps_R
-        HostName vps_ip
-        User vps_user
-        RemoteForward 6644 localhost:22
-
-host name_home
-        hostname localhost
-        user home_user
-        port 6666
-        proxyjump name_vps
+    HostName vps_ip
+    User vps_user
+    RemoteForward 6666 localhost:22
 ```
 
-### VPS CONF
+### Work PC
 
-```config
+```sshconfig
 host *
-        ForwardX11 yes
-        Compression yes
+    ForwardX11 yes
+    Compression yes
+
+host name_vps
+    HostName vps_ip
+    Port 443
+    User vps_user
+    ProxyCommand /usr/local/bin/corkscrew 192.168.172.129 3128 %h %p
+
+host name_vps_R
+    HostName vps_ip
+    User vps_user
+    RemoteForward 6644 localhost:22
 
 host name_home
-        HostName localhost
-        User home_user
-        Port 6666
+    HostName localhost
+    User home_user
+    Port 6666
+    ProxyJump name_vps
+```
+
+### VPS
+
+```sshconfig
+host *
+    ForwardX11 yes
+    Compression yes
+
+host name_home
+    HostName localhost
+    User home_user
+    Port 6666
 
 host name_work
-        HostName localhost
-        User work_user
-        Port 6644
+    HostName localhost
+    User work_user
+    Port 6644
 ```
 
-# autossh
+---
 
-https://www.opennet.ru/tips/2157_ssh_tunnel_ping.shtml
-
-`apt install autossh`
+## Using `autossh`
 
 ```bash
+sudo apt install autossh
 export AUTOSSH_DEBUG=1
 export AUTOSSH_GATETIME=0
 export AUTOSSH_PORT=20037
-autossh -f -N username@rose -R 6666:127.0.0.1:22
+autossh -f -N vps_user@vps_ip -R 6666:127.0.0.1:22
 ```

@@ -60,11 +60,13 @@ jobs:
       - name: Convert README.md to PDF
         run: |
           mkdir -p pdf
-          md-to-pdf README.md \
-            --basedir "$(pwd)" \
-            --config-file md-to-pdf-config.js \
-            --launch-options '{"args":["--no-sandbox","--disable-setuid-sandbox"]}'
-          mv README.pdf pdf/README.pdf
+          for file in ./*.md; do
+            md-to-pdf "$file" \
+              --basedir "$(pwd)" \
+              --config-file md-to-pdf-config.js \
+              --launch-options '{"args":["--no-sandbox","--disable-setuid-sandbox"]}'
+            mv "${file%.md}.pdf" pdf/
+          done
 
       # 6. Upload PDF to GitHub Actions artifacts
       - name: Upload PDF to Actions artifacts
@@ -80,7 +82,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add pdf/README.pdf
+          git add pdf/*.pdf
           if ! git diff --cached --quiet; then
             git commit -m "Update README.pdf [skip ci]"
             git push https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
