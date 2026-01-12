@@ -167,10 +167,6 @@ A(VPS) <--> B[corkscrew] <--> CB[work PC]
 заменить INTERNAL_PROXY_IP INTERNAL_PROXY_PORT на используемые в офисе
 
     ```config
-    host *
-            ForwardX11 yes
-            Compression yes
-
     host name_vps
             HostName vps_ip
             Port 443
@@ -183,6 +179,10 @@ A(VPS) <--> B[corkscrew] <--> CB[work PC]
             User home_user
             Port 6666
             ProxyJump name_vps
+    
+    host *
+            ForwardX11 yes
+            Compression yes
     ```
 
 3. подключиться к серверу с работы  
@@ -215,10 +215,6 @@ A["home PC"] <-- port 6666 --> B(VPS) <--> C(рабочий proxy) <-- port 6644
 ### HOME CONF
 
 ```config
-host *
-        ForwardX11 yes
-        Compression yes
-
 Host name_vps
         HostName vps_ip
         User vps_user
@@ -227,15 +223,15 @@ host name_vps_R
         HostName vps_ip
         User vps_user
         RemoteForward 6666 localhost:22
+
+host *
+        ForwardX11 yes
+        Compression yes
 ```
 
 ### WORK CONF
 
 ```conf
-host *
-        ForwardX11 yes
-        Compression yes
-
 host name_vps
         HostName vps_ip
         Port 443
@@ -253,15 +249,15 @@ host name_home
         user home_user
         port 6666
         proxyjump name_vps
+
+host *
+        ForwardX11 yes
+        Compression yes
 ```
 
 ### VPS CONF
 
 ```config
-host *
-        ForwardX11 yes
-        Compression yes
-
 host name_home
         HostName localhost
         User home_user
@@ -271,6 +267,10 @@ host name_work
         HostName localhost
         User work_user
         Port 6644
+
+host *
+        ForwardX11 yes
+        Compression yes
 ```
 
 # autossh

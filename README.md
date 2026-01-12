@@ -204,10 +204,6 @@ A["home PC"] <-- port 6666 --> B(VPS) <--> C(рабочий proxy) <-- port 6644
 ### Home PC
 
 ```sshconfig
-host *
-    ForwardX11 yes
-    Compression yes
-
 host name_vps
     HostName vps_ip
     User vps_user
@@ -216,15 +212,15 @@ host name_vps_R
     HostName vps_ip
     User vps_user
     RemoteForward 6666 localhost:22
+
+host *
+    ForwardX11 yes
+    Compression yes
 ```
 
 ### Work PC
 
 ```sshconfig
-host *
-    ForwardX11 yes
-    Compression yes
-
 host name_vps
     HostName vps_ip
     Port 443
@@ -241,15 +237,15 @@ host name_home
     User home_user
     Port 6666
     ProxyJump name_vps
+
+host *
+    ForwardX11 yes
+    Compression yes
 ```
 
 ### VPS
 
 ```sshconfig
-host *
-    ForwardX11 yes
-    Compression yes
-
 host name_home
     HostName localhost
     User home_user
@@ -259,6 +255,10 @@ host name_work
     HostName localhost
     User work_user
     Port 6644
+
+host *
+    ForwardX11 yes
+    Compression yes
 ```
 
 ---
